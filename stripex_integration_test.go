@@ -41,10 +41,12 @@ func TestStripeClientIntegrationAccountLifecycle(t *testing.T) {
 	require.True(t, strings.HasPrefix(authAcc.ID, "acct_"), "unexpected Stripe account ID %q", authAcc.ID)
 	require.GreaterOrEqual(t, authAcc.RequirementsDueCount, 0)
 
-	email := fmt.Sprintf("comff-onboarding-stripe-it+%d@example.com", time.Now().UTC().UnixNano())
+	uniqueID := time.Now().UTC().UnixNano()
+	email := fmt.Sprintf("comff-onboarding-stripe-it+%d@example.com", uniqueID)
 	created, err := client.CreateConnectedAccount(ctx, stripex.CreateConnectedAccountInput{
-		Email:   email,
-		Country: country,
+		Email:          email,
+		Country:        country,
+		IdempotencyKey: fmt.Sprintf("stripex-integration-account-%d", uniqueID),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, created)
@@ -59,15 +61,16 @@ func TestStripeClientIntegrationAccountLifecycle(t *testing.T) {
 	require.Equal(t, created.ID, retrieved.ID)
 	require.GreaterOrEqual(t, retrieved.RequirementsDueCount, 0)
 
-	conAccs, err := client.ListConnectedAccounts(ctx)
+	conAccs, err := client.ListConnectedAccounts(ctx, stripex.ListConnectedAccountsInput{Limit: 100})
 	require.NoError(t, err)
 	require.NotNil(t, conAccs)
-	require.GreaterOrEqual(t, len(conAccs), 1)
+	require.GreaterOrEqual(t, len(conAccs.Accounts), 1)
 
 	link, err := client.CreateAccountLink(ctx, stripex.CreateAccountLinkInput{
-		AccountID:  created.ID,
-		RefreshURL: "https://example.com/onboarding/stripe/refresh",
-		ReturnURL:  "https://example.com/onboarding/stripe/return",
+		AccountID:      created.ID,
+		RefreshURL:     "https://example.com/onboarding/stripe/refresh",
+		ReturnURL:      "https://example.com/onboarding/stripe/return",
+		IdempotencyKey: fmt.Sprintf("stripex-integration-account-link-%d", uniqueID),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, link)
@@ -89,6 +92,7 @@ func TestStripeClientIntegrationConstructWebhookEvent(t *testing.T) {
 
 	payload, err := json.Marshal(map[string]any{
 		"id":               "evt_stripe_client_integration",
+		"account":          "acct_stripe_client_integration",
 		"object":           "event",
 		"api_version":      stripe.APIVersion,
 		"created":          time.Now().UTC().Unix(),
@@ -120,6 +124,7 @@ func TestStripeClientIntegrationConstructWebhookEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, event)
 	require.Equal(t, "evt_stripe_client_integration", event.ID)
+	require.Equal(t, "acct_stripe_client_integration", event.AccountID)
 	require.Equal(t, "account.updated", event.Type)
 	require.JSONEq(t, `{
 		"id": "acct_stripe_client_integration",
@@ -179,11 +184,11 @@ func registerStripeAccountCleanup(t *testing.T, cl stripex.StripeClient, account
 			t.Logf("deleted Stripe test account %s", accountID)
 		}
 
-		conAccs, err := cl.ListConnectedAccounts(ctx)
+		conAccs, err := cl.ListConnectedAccounts(ctx, stripex.ListConnectedAccountsInput{Limit: 100})
 		if err != nil {
 			t.Errorf("list Stripe connected accounts after cleanup: %v", err)
 		} else {
-			if len(conAccs) > 0 {
+			if len(conAccs.Accounts) > 0 {
 				t.Logf("Stripe connected test accounts exist after cleanup")
 				// for _, acc := range conAccs {
 				// 	if err := cl.DeleteConnectedAccount(ctx, acc.ID); err != nil {
