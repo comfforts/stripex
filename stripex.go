@@ -10,19 +10,39 @@ import (
 	whapi "github.com/stripe/stripe-go/v85/webhook"
 )
 
+const (
+	ERR_MISSING_ACCOUNT_ID        = "missing account ID"
+	ERR_MISSING_STRIPE_SECRET_KEY = "missing Stripe secret key"
+	ERR_MISSING_REQUIRED_PARAMS   = "missing required parameters"
+)
+
+var (
+	ErrMissingAccountID       = fmt.Errorf(ERR_MISSING_ACCOUNT_ID)
+	ErrMissingStripeSecretKey = fmt.Errorf(ERR_MISSING_STRIPE_SECRET_KEY)
+	ErrMissingRequiredParams  = fmt.Errorf(ERR_MISSING_REQUIRED_PARAMS)
+)
+
 type stripeClient struct {
 	webhookSecret string
 }
 
-func NewStripeClient(secretKey, webhookSecret string) StripeClient {
+func NewStripeClient(secretKey, webhookSecret string) (StripeClient, error) {
+	if secretKey == "" {
+		return nil, ErrMissingStripeSecretKey
+	}
+
 	stripe.Key = secretKey
 	return &stripeClient{
 		webhookSecret: webhookSecret,
-	}
+	}, nil
 }
 
 // CreateConnectedAccount creates a new Stripe Connected Account with the provided details.
 func (c *stripeClient) CreateConnectedAccount(ctx context.Context, in CreateConnectedAccountInput) (*Account, error) {
+	if in.Email == "" || in.Country == "" {
+		return nil, ErrMissingRequiredParams
+	}
+
 	params := &stripe.AccountParams{
 		Email: stripe.String(in.Email),
 	}
@@ -42,6 +62,10 @@ func (c *stripeClient) CreateConnectedAccount(ctx context.Context, in CreateConn
 
 // GetConnectedAccount retrieves the current state of a Stripe Connected Account by its ID.
 func (c *stripeClient) GetConnectedAccount(ctx context.Context, accountID string) (*Account, error) {
+	if accountID == "" {
+		return nil, ErrMissingAccountID
+	}
+
 	params := &stripe.AccountParams{}
 	params.Context = ctx
 
@@ -81,6 +105,10 @@ func (c *stripeClient) GetAccount(ctx context.Context) (*Account, error) {
 
 // DeleteConnectedAccount deletes an existing Stripe Connected Account by its ID.
 func (c *stripeClient) DeleteConnectedAccount(ctx context.Context, accountID string) error {
+	if accountID == "" {
+		return ErrMissingAccountID
+	}
+
 	params := &stripe.AccountParams{}
 	params.Context = ctx
 
@@ -96,6 +124,10 @@ func (c *stripeClient) DeleteConnectedAccount(ctx context.Context, accountID str
 
 // CreateAccountLink generates an onboarding link for the specified Stripe Connected Account.
 func (c *stripeClient) CreateAccountLink(ctx context.Context, in CreateAccountLinkInput) (*AccountLink, error) {
+	if in.AccountID == "" || in.RefreshURL == "" || in.ReturnURL == "" {
+		return nil, ErrMissingRequiredParams
+	}
+
 	params := &stripe.AccountLinkParams{
 		Account:    stripe.String(in.AccountID),
 		RefreshURL: stripe.String(in.RefreshURL),

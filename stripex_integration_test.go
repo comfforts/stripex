@@ -30,7 +30,8 @@ func TestStripeClientIntegrationAccountLifecycle(t *testing.T) {
 		country = "US"
 	}
 
-	client := stripex.NewStripeClient(secretKey, "whsec_not_used_by_account_lifecycle")
+	client, err := stripex.NewStripeClient(secretKey, "whsec_not_used_by_account_lifecycle")
+	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 
@@ -112,7 +113,8 @@ func TestStripeClientIntegrationConstructWebhookEvent(t *testing.T) {
 		Payload: payload,
 		Secret:  webhookSecret,
 	})
-	client := stripex.NewStripeClient("sk_test_not_used_by_webhook_test", webhookSecret)
+	client, err := stripex.NewStripeClient("sk_test_not_used_by_webhook_test", webhookSecret)
+	require.NoError(t, err)
 
 	event, err := client.ConstructWebhookEvent(payload, signed.Header)
 	require.NoError(t, err)
